@@ -296,14 +296,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <button type="submit" class="btn-login">Sign In as Staff</button>
             </form>
 
-            <div class="staff-footer">
-                <a href="<?= baseUrl('admin/login.php') ?>">← Back to staff login</a>
-                <br>
-                <a href="<?= baseUrl('login.php') ?>" class="customer-link">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                    I'm a customer instead
-                </a>
-            </div>
+           
 
             <div class="security-note">
                 🔒 This portal is monitored. Unauthorized access attempts are logged.

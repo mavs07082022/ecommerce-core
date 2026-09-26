@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../config/mailer.php';
 
 header('Content-Type: application/json');
 
@@ -22,10 +21,10 @@ if ($stmt->fetchColumn() >= 3) {
 }
 
 try {
-    // Invalidate old OTPs
+    // Invalidate old unused OTPs
     $pdo->prepare("UPDATE email_otps SET used = 1 WHERE email = ? AND used = 0")->execute([$email]);
 
-    // Get user id
+    // Get user_id
     $u = $pdo->prepare("SELECT id FROM users WHERE email = ?");
     $u->execute([$email]);
     $userId = $u->fetchColumn();
@@ -36,19 +35,19 @@ try {
     }
 
     // Generate new OTP — expires in 10 minutes
-    $otp = generateOTP(6);
+    $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
     $expiresAt = date('Y-m-d H:i:s', strtotime('+10 minutes'));
 
     $pdo->prepare("INSERT INTO email_otps (user_id, email, otp_code, purpose, expires_at) VALUES (?, ?, ?, 'register', ?)")
         ->execute([$userId, $email, $otp, $expiresAt]);
 
-    // Send email
-    $result = sendOTPEmail($email, $name, $otp, 'register');
-    if (!$result['success']) {
-        echo json_encode(['success' => false, 'error' => $result['error'] ?? 'Email send failed.']);
-        exit;
-    }
-    echo json_encode(['success' => true]);
+    // Return OTP so client-side EmailJS can send it
+    echo json_encode([
+        'success' => true,
+        'otp' => $otp,
+        'email' => $email,
+        'name' => $name
+    ]);
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }

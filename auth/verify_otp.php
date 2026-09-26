@@ -14,42 +14,34 @@ $sent = isset($_GET['sent']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $otp = trim($_POST['otp'] ?? '');
-    $otp = preg_replace('/\D/', '', $otp); // strip any non-digits
+    $otp = preg_replace('/\D/', '', $otp);
 
     if (strlen($otp) !== 6) {
         $error = 'Please enter all 6 digits.';
     } else {
-        // Debug: fetch the latest OTP record for this email
-        $debug = $pdo->prepare("SELECT id, otp_code, expires_at, used, NOW() as server_now FROM email_otps WHERE email = ? ORDER BY id DESC LIMIT 1");
+        // Debug: fetch latest OTP for smarter errors
+        $debug = $pdo->prepare("SELECT id, otp_code, expires_at, used FROM email_otps WHERE email = ? ORDER BY id DESC LIMIT 1");
         $debug->execute([$email]);
         $latest = $debug->fetch();
 
-        // Look for a matching valid OTP
         $stmt = $pdo->prepare("
             SELECT * FROM email_otps
-            WHERE email = ?
-              AND otp_code = ?
-              AND used = 0
-              AND expires_at > NOW()
-            ORDER BY id DESC
-            LIMIT 1
+            WHERE email = ? AND otp_code = ? AND used = 0 AND expires_at > NOW()
+            ORDER BY id DESC LIMIT 1
         ");
         $stmt->execute([$email, $otp]);
         $record = $stmt->fetch();
 
         if ($record) {
-            // Mark used
             $pdo->prepare("UPDATE email_otps SET used = 1 WHERE id = ?")->execute([$record['id']]);
-
-            // Mark user verified
             $pdo->prepare("UPDATE users SET email_verified = 1 WHERE email = ?")->execute([$email]);
 
-            // Fetch user & log in
             $u = $pdo->prepare("SELECT * FROM users WHERE email = ?");
             $u->execute([$email]);
             $user = $u->fetch();
 
             if ($user) {
+                session_regenerate_id(true);
                 $_SESSION['user_id']   = $user['id'];
                 $_SESSION['username']  = $user['username'];
                 $_SESSION['role']      = $user['role'];
@@ -57,14 +49,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 unset($_SESSION['pending_verification_email'], $_SESSION['pending_verification_name']);
 
-                if ($user['role'] === 'admin') redirectRoot('index.php');
-                if ($user['role'] === 'product_manager') redirectRoot('pm_dashboard.php');
                 redirectRoot('customer_dashboard.php');
             } else {
                 $error = 'Account not found. Please register again.';
             }
         } else {
-            // Provide smarter error messages
             if (!$latest) {
                 $error = 'No verification code found for this email. Please request a new one.';
             } elseif ($latest['used']) {
@@ -79,9 +68,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
-
-$sendError = $_SESSION['otp_send_error'] ?? null;
-unset($_SESSION['otp_send_error']);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -90,12 +76,19 @@ unset($_SESSION['otp_send_error']);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Verify Email — E-Commerce Core</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <script>
+        (function() {
+            emailjs.init("3wNkVwO4O9bDjbwoz"); // ← Replace
+        })();
+    </script>
     <style>
         *, *::before, *::after { box-sizing: border-box; }
         html, body {
             margin: 0; padding: 0;
-            font-family: 'Inter', -apple-system, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             font-size: 15px; line-height: 1.5;
             -webkit-font-smoothing: antialiased;
             background: #f4f7fb; color: #1f2937;
@@ -238,13 +231,6 @@ unset($_SESSION['otp_send_error']);
             <div class="alert alert-success">✅ Verification code sent! Check your inbox (and Spam folder).</div>
         <?php endif; ?>
 
-        <?php if ($sendError): ?>
-            <div class="alert alert-warning">
-                ⚠️ Email could not be sent: <?= e($sendError) ?><br>
-                <small>Check your SMTP credentials in <code>config/mail_credentials.php</code>.</small>
-            </div>
-        <?php endif; ?>
-
         <?php if ($error): ?>
             <div class="alert alert-error"><?= e($error) ?></div>
         <?php endif; ?>
@@ -259,7 +245,6 @@ unset($_SESSION['otp_send_error']);
                 <input type="text" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]">
                 <input type="text" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]">
             </div>
-
             <button type="submit" class="btn btn-primary">Verify &amp; Continue</button>
         </form>
 
@@ -276,6 +261,7 @@ unset($_SESSION['otp_send_error']);
 </div>
 
 <script>
+// ---------- OTP input handling ----------
 const inputs = document.querySelectorAll('.otp-input');
 const hidden = document.getElementById('otpHidden');
 
@@ -314,23 +300,42 @@ document.getElementById('otpForm').addEventListener('submit', (e) => {
     }
 });
 
+// ---------- Resend OTP via EmailJS ----------
 async function resendOTP(btn) {
     btn.disabled = true;
     const original = btn.textContent;
     btn.textContent = 'Sending...';
+
     try {
-        const res = await fetch('<?= baseUrl('resend_otp.php') ?>', { method: 'POST' });
+        const res = await fetch('<?= baseUrl('auth/resend_otp.php') ?>', { method: 'POST' });
         const data = await res.json();
-        if (data.success) {
-            btn.textContent = '✅ Sent! Check inbox';
-            setTimeout(() => { btn.disabled = false; btn.textContent = original; }, 4000);
-        } else {
+
+        if (!data.success) {
             alert('Failed: ' + (data.error || 'Unknown error'));
             btn.disabled = false;
             btn.textContent = original;
+            return;
         }
+
+        // Send via EmailJS using the OTP returned from the server
+        await emailjs.send(
+            'service_h6zywtr',   // ← Replace
+            'template_s050h21',  // ← Replace
+            {
+                email: data.email,
+                passcode: data.otp,
+                name: data.name
+            }
+        );
+
+        btn.textContent = '✅ Sent! Check inbox';
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = original;
+        }, 4000);
     } catch (err) {
-        alert('Error: ' + err.message);
+        console.error('EmailJS error:', err);
+        alert('Error: ' + (err.text || err.message || 'Could not send the code'));
         btn.disabled = false;
         btn.textContent = original;
     }

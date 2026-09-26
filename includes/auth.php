@@ -83,3 +83,13 @@ if (!function_exists('e')) {
         return htmlspecialchars($s ?? '', ENT_QUOTES, 'UTF-8');
     }
 }
+
+/**
+ * Generate a random numeric OTP of the given length.
+ * Uses cryptographically secure random_int().
+ */
+if (!function_exists('generateOTP')) {
+    function generateOTP($length = 6) {
+        return str_pad((string)random_int(0, (int)pow(10, $length) - 1), $length, '0', STR_PAD_LEFT);
+    }
+}
