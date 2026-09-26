@@ -1,0 +1,26 @@
+ecommerce-core/
+├── assets/
+│   ├── css/style.css
+│   ├── js/main.js
+│   └── uploads/.gitkeep
+├── config/db.php
+├── includes/
+│   ├── auth.php
+│   ├── header.php
+│   ├── sidebar.php
+│   └── footer.php
+├── modules/
+│   ├── users.php
+│   ├── products.php
+│   ├── orders.php
+│   ├── returns.php
+│   └── shop.php
+├── ai/cohere_service.php
+├── api/
+│   ├── ai_query.php
+│   ├── cart_remove.php
+│   └── checkout.php
+├── index.php
+├── login.php
+├── logout.php
+└── hash.php
