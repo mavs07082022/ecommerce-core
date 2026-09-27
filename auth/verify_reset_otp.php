@@ -2,15 +2,15 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../config/db.php';
 
-$email = $_SESSION['pending_verification_email'] ?? '';
-$name  = $_SESSION['pending_verification_name'] ?? 'there';
+$email = $_SESSION['reset_user_email'] ?? '';
+$name  = $_SESSION['reset_user_name']  ?? 'there';
 
 if (!$email) {
-    redirect('register.php');
+    redirect('auth/forgot_password.php');
 }
 
 $error = '';
-$sent = isset($_GET['sent']);
+$sent  = isset($_GET['sent']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $otp = trim($_POST['otp'] ?? '');
@@ -19,43 +19,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (strlen($otp) !== 6) {
         $error = 'Please enter all 6 digits.';
     } else {
-        // Debug: fetch latest OTP for smarter errors
-        $debug = $pdo->prepare("SELECT id, otp_code, expires_at, used FROM email_otps WHERE email = ? AND purpose = 'register' ORDER BY id DESC LIMIT 1");
+        // Fetch latest reset OTP for this email
+        $debug = $pdo->prepare("SELECT id, otp_code, expires_at, used FROM email_otps WHERE email = ? AND purpose = 'reset' ORDER BY id DESC LIMIT 1");
         $debug->execute([$email]);
         $latest = $debug->fetch();
 
         $stmt = $pdo->prepare("
             SELECT * FROM email_otps
-            WHERE email = ? AND otp_code = ? AND purpose = 'register' AND used = 0 AND expires_at > NOW()
+            WHERE email = ? AND otp_code = ? AND purpose = 'reset' AND used = 0 AND expires_at > NOW()
             ORDER BY id DESC LIMIT 1
         ");
         $stmt->execute([$email, $otp]);
         $record = $stmt->fetch();
 
         if ($record) {
+            // Mark used
             $pdo->prepare("UPDATE email_otps SET used = 1 WHERE id = ?")->execute([$record['id']]);
-            $pdo->prepare("UPDATE users SET email_verified = 1 WHERE email = ?")->execute([$email]);
 
-            $u = $pdo->prepare("SELECT * FROM users WHERE email = ?");
-            $u->execute([$email]);
-            $user = $u->fetch();
+            // Grant reset permission for the next step
+            $_SESSION['reset_verified'] = true;
 
-            if ($user) {
-                session_regenerate_id(true);
-                $_SESSION['user_id']   = $user['id'];
-                $_SESSION['username']  = $user['username'];
-                $_SESSION['role']      = $user['role'];
-                $_SESSION['full_name'] = $user['full_name'];
-
-                unset($_SESSION['pending_verification_email'], $_SESSION['pending_verification_name']);
-
-                redirectRoot('customer_dashboard.php');
-            } else {
-                $error = 'Account not found. Please register again.';
-            }
+            redirect('auth/reset_password.php');
         } else {
             if (!$latest) {
-                $error = 'No verification code found for this email. Please request a new one.';
+                $error = 'No reset code found for this email. Please request a new one.';
             } elseif ($latest['used']) {
                 $error = 'This code has already been used. Please request a new one.';
             } elseif (strtotime($latest['expires_at']) < time()) {
@@ -74,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verify Email — E-Commerce Core</title>
+    <title>Reset Code — E-Commerce Core</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -217,8 +204,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="auth-bg">
     <div class="auth-card">
         <div class="auth-header">
-            <a href="<?= rootUrl('landing.php') ?>" class="auth-logo">✉</a>
-            <h1>Verify Your Email</h1>
+            <a href="<?= rootUrl('landing.php') ?>" class="auth-logo">🔐</a>
+            <h1>Enter Reset Code</h1>
             <p>We sent a 6-digit code to your inbox</p>
         </div>
 
@@ -228,7 +215,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <?php if ($sent && !$error): ?>
-            <div class="alert alert-success">✅ Verification code sent! Check your inbox (and Spam folder).</div>
+            <div class="alert alert-success">✅ Reset code sent! Check your inbox (and Spam folder).</div>
         <?php endif; ?>
 
         <?php if ($error): ?>
@@ -245,7 +232,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <input type="text" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]">
                 <input type="text" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]">
             </div>
-            <button type="submit" class="btn btn-primary">Verify &amp; Continue</button>
+            <button type="submit" class="btn btn-primary">Verify Code</button>
         </form>
 
         <div class="footer-links">
@@ -254,7 +241,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 Resend Code
             </button>
             <div style="margin-top:16px;">
-                <a href="<?= baseUrl('auth/register.php') ?>">← Use a different email</a>
+                <a href="<?= baseUrl('auth/forgot_password.php') ?>">← Use a different email</a>
             </div>
         </div>
     </div>
@@ -307,7 +294,7 @@ async function resendOTP(btn) {
     btn.textContent = 'Sending...';
 
     try {
-        const res = await fetch('<?= baseUrl('auth/resend_otp.php') ?>', { method: 'POST' });
+        const res = await fetch('<?= baseUrl('auth/resend_reset_otp.php') ?>', { method: 'POST' });
         const data = await res.json();
 
         if (!data.success) {
@@ -322,9 +309,9 @@ async function resendOTP(btn) {
             'service_h6zywtr',   // ← Your service ID
             'template_s050h21',  // ← Your template ID
             {
-                email: data.email,
+                email:    data.email,
                 passcode: data.otp,
-                name: data.name
+                name:     data.name
             }
         );
 

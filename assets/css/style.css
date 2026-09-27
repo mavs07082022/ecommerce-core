@@ -792,3 +792,22 @@ tbody td { padding: 14px 18px; color: #374151; vertical-align: middle; }
 .product-actions button {
     flex: 1;
 }
+.product-actions {
+    display: flex;
+    gap: 6px;
+    padding: 0 16px 16px;
+}
+
+.product-actions input[type="number"] {
+    width: 54px;
+    padding: 8px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 0.85rem;
+    font-family: inherit;
+}
+
+.product-actions button {
+    flex: 1;
+}

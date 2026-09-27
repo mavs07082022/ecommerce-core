@@ -55,7 +55,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $newUserId = $pdo->lastInsertId();
 
                 $otp = generateOTP(6);
-                $expiresAt = date('Y-m-d H:i:s', strtotime('+10 minutes'));
+                // ⏱ Registration OTP now expires in 2 minutes
+                $expiresAt = date('Y-m-d H:i:s', strtotime('+2 minutes'));
 
                 $pdo->prepare("DELETE FROM email_otps WHERE email = ? AND used = 0")->execute([$email]);
                 $pdo->prepare("INSERT INTO email_otps (user_id, email, otp_code, purpose, expires_at) VALUES (?, ?, ?, 'register', ?)")

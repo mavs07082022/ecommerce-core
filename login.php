@@ -8,6 +8,21 @@ if (isset($_SESSION['user_id'])) {
     redirect('customer_dashboard.php');
 }
 
+// Flash message after successful password reset (one-time)
+$resetSuccess  = false;
+$resetUsername = '';
+if (isset($_GET['reset']) && $_GET['reset'] === 'success') {
+    $resetSuccess  = true;
+    $resetUsername = $_SESSION['reset_success_username'] ?? '';
+    unset($_SESSION['reset_success_username']); // consume it
+}
+
+// If we need to auto-send an OTP after redirecting to verify page
+$sendOtpOnLoad  = false;
+$otpEmail       = '';
+$otpCode        = '';
+$otpName        = '';
+
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
@@ -19,22 +34,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password'])) {
-            // Block unverified customers
+            // Block unverified customers — send them a fresh OTP
             if ($user['role'] === 'customer' && !$user['email_verified']) {
-                $_SESSION['pending_verification_email'] = $user['email'];
-                $_SESSION['pending_verification_name']  = $user['full_name'];
-                redirect('auth/verify_otp.php');
+                try {
+                    // Invalidate old register OTPs for this user
+                    $pdo->prepare("UPDATE email_otps SET used = 1 WHERE user_id = ? AND purpose = 'register' AND used = 0")
+                        ->execute([$user['id']]);
+
+                    // Generate a fresh register OTP — 2 minutes
+                    $otp       = generateOTP(6);
+                    $expiresAt = date('Y-m-d H:i:s', strtotime('+2 minutes'));
+
+                    $pdo->prepare("
+                        INSERT INTO email_otps (user_id, email, otp_code, purpose, expires_at, used)
+                        VALUES (?, ?, ?, 'register', ?, 0)
+                    ")->execute([$user['id'], $user['email'], $otp, $expiresAt]);
+
+                    $_SESSION['pending_verification_email'] = $user['email'];
+                    $_SESSION['pending_verification_name']  = $user['full_name'] ?: $user['username'];
+
+                    // Flag EmailJS to send on this page before redirect
+                    $sendOtpOnLoad = true;
+                    $otpEmail = $user['email'];
+                    $otpCode  = $otp;
+                    $otpName  = $user['full_name'] ?: $user['username'];
+                } catch (Exception $e) {
+                    $error = 'Could not send verification code. Please try again.';
+                }
+            } else {
+                session_regenerate_id(true);
+                $_SESSION['user_id']   = $user['id'];
+                $_SESSION['username']  = $user['username'];
+                $_SESSION['role']      = $user['role'];
+                $_SESSION['full_name'] = $user['full_name'];
+
+                // Clear any stale pending verification session
+                unset($_SESSION['pending_verification_email'], $_SESSION['pending_verification_name']);
+
+                if ($user['role'] === 'admin') redirect('index.php');
+                if ($user['role'] === 'product_manager') redirect('pm_dashboard.php');
+                redirect('customer_dashboard.php');
             }
-
-            session_regenerate_id(true);
-            $_SESSION['user_id']   = $user['id'];
-            $_SESSION['username']  = $user['username'];
-            $_SESSION['role']      = $user['role'];
-            $_SESSION['full_name'] = $user['full_name'];
-
-            if ($user['role'] === 'admin') redirect('index.php');
-            if ($user['role'] === 'product_manager') redirect('pm_dashboard.php');
-            redirect('customer_dashboard.php');
         } else {
             $error = 'Invalid username or password.';
         }
@@ -206,11 +246,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             box-shadow: 0 8px 24px rgba(17,24,39,0.32);
             margin-top: 8px;
         }
-        .btn-login:hover {
+        .btn-login:hover:not(:disabled) {
             transform: translateY(-1px);
             box-shadow: 0 12px 32px rgba(17,24,39,0.42);
             background: linear-gradient(135deg, #111827, #1e293b);
         }
+        .btn-login:disabled { opacity: 0.7; cursor: not-allowed; }
 
         .alert {
             padding: 12px 16px;
@@ -220,6 +261,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border: 1px solid;
         }
         .alert-error { background: #fef2f2; color: #991b1b; border-color: #fca5a5; }
+        .alert-success { background: #ecfdf5; color: #065f46; border-color: #6ee7b7; }
+        .alert-info { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+
+        .username-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 10px;
+            background: #ffffff;
+            border: 1px solid #6ee7b7;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #065f46;
+            margin-top: 6px;
+            font-family: 'SF Mono', Monaco, monospace;
+        }
+        .username-chip svg { width: 12px; height: 12px; }
 
         .login-footer {
             text-align: center;
@@ -304,6 +363,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             transition: color 0.15s;
         }
         .back-home a:hover { color: #2563eb; }
+
+        /* Forgot password link */
+        .forgot-row {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: -8px;
+            margin-bottom: 14px;
+        }
+        .forgot-link {
+            color: #2563eb;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: color 0.15s;
+        }
+        .forgot-link:hover { color: #1d4ed8; text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -325,10 +400,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="alert alert-error"><?= e($error) ?></div>
             <?php endif; ?>
 
-            <form method="POST">
+            <?php if ($resetSuccess): ?>
+                <div class="alert alert-success" style="padding:16px;">
+                    <div style="font-weight:700;margin-bottom:6px;">✅ Password reset successfully!</div>
+                    <?php if ($resetUsername): ?>
+                        <div style="margin-bottom:8px;">Sign in with your username:</div>
+                        <div class="username-chip">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                            <?= e($resetUsername) ?>
+                        </div>
+                    <?php else: ?>
+                        Please sign in with your new password.
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+
+            <div id="otpSendingNote" style="display:none;" class="alert alert-info">
+                📧 Sending verification code to your email...
+            </div>
+
+            <form method="POST" id="loginForm">
                 <div class="form-group">
                     <label class="form-label">Username</label>
-                    <input type="text" name="username" class="form-input no-icon" required autofocus>
+                    <input type="text" name="username" class="form-input no-icon" value="<?= $resetUsername ? e($resetUsername) : '' ?>" required autofocus>
                 </div>
 
                 <div class="form-group">
@@ -341,7 +435,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                 </div>
 
-                <button type="submit" class="btn-login">Sign In</button>
+                <div class="forgot-row">
+                    <a href="<?= baseUrl('auth/forgot_password.php') ?>" class="forgot-link">Forgot password?</a>
+                </div>
+
+                <button type="submit" class="btn-login" id="loginBtn">Sign In</button>
             </form>
 
             <div class="register-section">
@@ -349,7 +447,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <a href="<?= baseUrl('auth/register.php') ?>" class="btn-secondary">Create an Account</a>
             </div>
 
-            
             <div class="security-note">
                 🔒 Your connection is secure. We never share your personal information.
             </div>
@@ -360,7 +457,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
+    <!-- EmailJS SDK -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
     <script>
+    (function() {
+        emailjs.init("3wNkVwO4O9bDjbwoz"); // ← Your public key
+    })();
+
     function togglePassword(id, btn) {
         const inp = document.getElementById(id);
         if (inp.type === 'password') {
@@ -371,6 +474,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             btn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
         }
     }
+
+    <?php if ($sendOtpOnLoad): ?>
+    // Login detected an unverified customer — auto-send OTP via EmailJS, then redirect to verify page
+    document.addEventListener('DOMContentLoaded', async function() {
+        const btn = document.getElementById('loginBtn');
+        const form = document.getElementById('loginForm');
+        const note = document.getElementById('otpSendingNote');
+
+        btn.disabled = true;
+        btn.textContent = 'Sending verification code...';
+        note.style.display = 'block';
+
+        try {
+            await emailjs.send(
+                'service_h6zywtr',   // ← Your service ID
+                'template_s050h21',  // ← Your template ID
+                {
+                    email:    <?= json_encode($otpEmail) ?>,
+                    passcode: <?= json_encode($otpCode) ?>,
+                    name:     <?= json_encode($otpName) ?>
+                }
+            );
+            window.location.href = '<?= baseUrl('auth/verify_otp.php?sent=1') ?>';
+        } catch (err) {
+            console.error('EmailJS error:', err);
+            alert('Could not send the verification email. Please try again.');
+            btn.disabled = false;
+            btn.textContent = 'Sign In';
+            note.style.display = 'none';
+        }
+    });
+    <?php endif; ?>
     </script>
 </body>
 </html>

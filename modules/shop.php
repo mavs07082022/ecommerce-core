@@ -12,6 +12,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     $qty = max(1, (int)$_POST['quantity']);
     if (!isset($_SESSION['cart'])) $_SESSION['cart'] = [];
     $_SESSION['cart'][$pid] = ($_SESSION['cart'][$pid] ?? 0) + $qty;
+
+    // If the request came from product_detail.php, send the user back there
+    if (!empty($_POST['redirect_back']) && strpos($_POST['redirect_back'], 'product_detail.php') !== false) {
+        $back = $_POST['redirect_back'];
+        $sep = (strpos($back, '?') !== false) ? '&' : '?';
+        header('Location: ' . $back . $sep . 'added=1');
+        exit;
+    }
+
     $returnMsg = "Added to cart!";
 }
 
@@ -113,26 +122,33 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="product-grid">
                 <?php foreach ($products as $p): ?>
                 <div class="product-card">
-                    <div class="product-image">
-                        <?php if ($p['image_url']): ?>
-                            <img src="<?= baseUrl($p['image_url']) ?>" alt="<?= e($p['name']) ?>">
-                        <?php else: ?>
-                            <?= strtoupper(substr($p['name'],0,1)) ?>
-                        <?php endif; ?>
-                    </div>
+                    <a href="<?= moduleUrl('product_detail.php?id=' . $p['id']) ?>" style="text-decoration:none;color:inherit;display:block;">
+                        <div class="product-image">
+                            <?php if ($p['image_url']): ?>
+                                <img src="<?= baseUrl($p['image_url']) ?>" alt="<?= e($p['name']) ?>">
+                            <?php else: ?>
+                                <?= strtoupper(substr($p['name'],0,1)) ?>
+                            <?php endif; ?>
+                        </div>
+                    </a>
                     <div class="product-body">
                         <div class="product-category"><?= e($p['category']) ?></div>
-                        <div class="product-name"><?= e($p['name']) ?></div>
+                        <a href="<?= moduleUrl('product_detail.php?id=' . $p['id']) ?>" style="text-decoration:none;color:inherit;">
+                            <div class="product-name"><?= e($p['name']) ?></div>
+                        </a>
                         <div class="product-desc"><?= e($p['description']) ?></div>
                         <div class="product-footer">
                             <span class="product-price">₱<?= number_format($p['price'], 2) ?></span>
                             <span class="product-stock">Stock: <?= (int)$p['stock'] ?></span>
                         </div>
-                        <form method="POST" class="product-actions">
-                            <input type="hidden" name="product_id" value="<?= $p['id'] ?>">
-                            <input type="number" name="quantity" value="1" min="1" max="<?= $p['stock'] ?>">
-                            <button type="submit" name="add_to_cart" class="btn btn-primary btn-sm">Add to Cart</button>
-                        </form>
+                        <div class="product-actions">
+                            <a href="<?= moduleUrl('product_detail.php?id=' . $p['id']) ?>" class="btn btn-secondary btn-sm" style="flex:1;">Details</a>
+                            <form method="POST" style="display:flex;gap:6px;flex:1;">
+                                <input type="hidden" name="product_id" value="<?= $p['id'] ?>">
+                                <input type="number" name="quantity" value="1" min="1" max="<?= $p['stock'] ?>">
+                                <button type="submit" name="add_to_cart" class="btn btn-primary btn-sm" style="flex:1;">Add to Cart</button>
+                            </form>
+                        </div>
                     </div>
                 </div>
                 <?php endforeach; ?>
@@ -160,9 +176,9 @@ require_once __DIR__ . '/../includes/header.php';
                                     <td><span class="badge <?= $pColors[$o['payment_status']] ?? 'badge-gray' ?>"><?= ucwords(str_replace('_',' ',$o['payment_status'])) ?></span></td>
                                     <td><span class="badge <?= $colors[$o['status']] ?? 'badge-gray' ?>"><?= e(ucfirst($o['status'])) ?></span></td>
                                     <td style="white-space:nowrap;">
-                                        <a href="<?= baseUrl('modules/track_order.php?id=' . $o['id']) ?>" class="btn btn-secondary btn-sm">Track</a>
+                                        <a href="<?= moduleUrl('track_order.php?id=' . $o['id']) ?>" class="btn btn-secondary btn-sm">Track</a>
                                         <?php if ($o['payment_status'] === 'unpaid' && !in_array($o['status'], ['cancelled','returned'])): ?>
-                                            <a href="<?= baseUrl('modules/payment.php?id=' . $o['id']) ?>" class="btn btn-primary btn-sm">Pay</a>
+                                            <a href="<?= moduleUrl('payment.php?id=' . $o['id']) ?>" class="btn btn-primary btn-sm">Pay</a>
                                         <?php endif; ?>
                                         <?php if (in_array($o['status'], ['pending','processing'])): ?>
                                             <form method="POST" style="display:inline;" onsubmit="return confirm('Cancel this order?')">

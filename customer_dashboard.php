@@ -111,7 +111,7 @@ require_once __DIR__ . '/includes/header.php';
             <div class="card" style="margin-bottom:28px;">
                 <div class="flex-between" style="padding:20px 24px; border-bottom:1px solid #e5e7eb;">
                     <h3 class="section-title">My Recent Orders</h3>
-                    <a href="<?= baseUrl('modules/shop.php') ?>" class="btn btn-secondary btn-sm">Shop More →</a>
+                    <a href="<?= moduleUrl('shop.php') ?>" class="btn btn-secondary btn-sm">Shop More →</a>
                 </div>
                 <div class="table-wrapper">
                     <table>
@@ -128,7 +128,7 @@ require_once __DIR__ . '/includes/header.php';
                         <tbody>
                             <?php if (empty($recentOrders)): ?>
                                 <tr><td colspan="6" style="text-align:center;padding:32px;color:#6b7280;">
-                                    You haven't placed any orders yet. <a href="<?= baseUrl('modules/shop.php') ?>" style="color:#2563eb;text-decoration:none;font-weight:600;">Start shopping →</a>
+                                    You haven't placed any orders yet. <a href="<?= moduleUrl('shop.php') ?>" style="color:#2563eb;text-decoration:none;font-weight:600;">Start shopping →</a>
                                 </td></tr>
                             <?php else: foreach ($recentOrders as $o):
                                 $colors = ['pending'=>'badge-yellow','processing'=>'badge-blue','shipped'=>'badge-indigo','delivered'=>'badge-green','cancelled'=>'badge-red','returned'=>'badge-gray'];
@@ -141,9 +141,9 @@ require_once __DIR__ . '/includes/header.php';
                                     <td><span class="badge <?= $colors[$o['status']] ?? 'badge-gray' ?>"><?= e(ucfirst($o['status'])) ?></span></td>
                                     <td style="color:#6b7280;"><?= date('M j, Y', strtotime($o['created_at'])) ?></td>
                                     <td style="white-space:nowrap;">
-                                        <a href="<?= baseUrl('modules/track_order.php?id=' . $o['id']) ?>" class="btn btn-secondary btn-sm">Track</a>
+                                        <a href="<?= moduleUrl('track_order.php?id=' . $o['id']) ?>" class="btn btn-secondary btn-sm">Track</a>
                                         <?php if ($o['payment_status'] === 'unpaid' && !in_array($o['status'], ['cancelled','returned'])): ?>
-                                            <a href="<?= baseUrl('modules/payment.php?id=' . $o['id']) ?>" class="btn btn-primary btn-sm">Pay Now</a>
+                                            <a href="<?= moduleUrl('payment.php?id=' . $o['id']) ?>" class="btn btn-primary btn-sm">Pay Now</a>
                                         <?php endif; ?>
                                     </td>
                                 </tr>
@@ -156,25 +156,29 @@ require_once __DIR__ . '/includes/header.php';
             <!-- Featured Products -->
             <div class="section-header">
                 <h3 class="section-title">Featured Products</h3>
-                <a href="<?= baseUrl('modules/shop.php') ?>" class="btn btn-secondary btn-sm">View All →</a>
+                <a href="<?= moduleUrl('shop.php') ?>" class="btn btn-secondary btn-sm">View All →</a>
             </div>
             <div class="product-grid">
                 <?php foreach ($featured as $p): ?>
                 <div class="product-card">
-                    <div class="product-image">
-                        <?php if ($p['image_url']): ?>
-                            <img src="<?= baseUrl($p['image_url']) ?>" alt="<?= e($p['name']) ?>">
-                        <?php else: ?>
-                            <?= strtoupper(substr($p['name'],0,1)) ?>
-                        <?php endif; ?>
-                    </div>
+                    <a href="<?= moduleUrl('product_detail.php?id=' . $p['id']) ?>" style="text-decoration:none;color:inherit;display:block;">
+                        <div class="product-image">
+                            <?php if ($p['image_url']): ?>
+                                <img src="<?= baseUrl($p['image_url']) ?>" alt="<?= e($p['name']) ?>">
+                            <?php else: ?>
+                                <?= strtoupper(substr($p['name'],0,1)) ?>
+                            <?php endif; ?>
+                        </div>
+                    </a>
                     <div class="product-body">
                         <div class="product-category"><?= e($p['category']) ?></div>
-                        <div class="product-name"><?= e($p['name']) ?></div>
+                        <a href="<?= moduleUrl('product_detail.php?id=' . $p['id']) ?>" style="text-decoration:none;color:inherit;">
+                            <div class="product-name"><?= e($p['name']) ?></div>
+                        </a>
                         <div class="product-footer">
                             <span class="product-price">₱<?= number_format($p['price'], 2) ?></span>
                         </div>
-                        <a href="<?= baseUrl('modules/shop.php') ?>" class="btn btn-primary btn-sm" style="margin-top:12px;width:100%;">View in Shop</a>
+                        <a href="<?= moduleUrl('product_detail.php?id=' . $p['id']) ?>" class="btn btn-primary btn-sm" style="margin-top:12px;width:100%;">View Details</a>
                     </div>
                 </div>
                 <?php endforeach; ?>
