@@ -26,8 +26,15 @@ $myUnpaidOrders = $pdo->prepare("SELECT COUNT(*) FROM orders WHERE user_id = ? A
 $myUnpaidOrders->execute([$uid]);
 $myUnpaidOrders = $myUnpaidOrders->fetchColumn();
 
-// Recent orders
-$recentOrders = $pdo->prepare("SELECT * FROM orders WHERE user_id = ? ORDER BY id DESC LIMIT 5");
+// Recent orders — join rider info so we can display rider name inline
+$recentOrders = $pdo->prepare("
+    SELECT o.*, r.full_name AS rider_name, r.phone AS rider_phone
+    FROM orders o
+    LEFT JOIN riders r ON o.rider_id = r.id
+    WHERE o.user_id = ?
+    ORDER BY o.id DESC
+    LIMIT 5
+");
 $recentOrders->execute([$uid]);
 $recentOrders = $recentOrders->fetchAll();
 
@@ -138,7 +145,19 @@ require_once __DIR__ . '/includes/header.php';
                                     <td><strong style="color:#111827;">#<?= e($o['order_number'] ?: $o['id']) ?></strong></td>
                                     <td>₱<?= number_format($o['total_amount'], 2) ?></td>
                                     <td><span class="badge <?= $pColors[$o['payment_status']] ?? 'badge-gray' ?>"><?= ucwords(str_replace('_',' ',$o['payment_status'])) ?></span></td>
-                                    <td><span class="badge <?= $colors[$o['status']] ?? 'badge-gray' ?>"><?= e(ucfirst($o['status'])) ?></span></td>
+                                    <td>
+                                        <span class="badge <?= $colors[$o['status']] ?? 'badge-gray' ?>"><?= e(ucfirst($o['status'])) ?></span>
+                                        <?php if ($o['status'] === 'shipped' && !empty($o['rider_name'])): ?>
+                                            <div style="font-size:0.72rem;color:#2563eb;margin-top:4px;font-weight:600;">
+                                                🛵 <?= e($o['rider_name']) ?>
+                                            </div>
+                                            <?php if (!empty($o['rider_phone'])): ?>
+                                                <div style="font-size:0.7rem;color:#6b7280;">
+                                                    📞 <?= e($o['rider_phone']) ?>
+                                                </div>
+                                            <?php endif; ?>
+                                        <?php endif; ?>
+                                    </td>
                                     <td style="color:#6b7280;"><?= date('M j, Y', strtotime($o['created_at'])) ?></td>
                                     <td style="white-space:nowrap;">
                                         <a href="<?= moduleUrl('track_order.php?id=' . $o['id']) ?>" class="btn btn-secondary btn-sm">Track</a>

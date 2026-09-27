@@ -2,62 +2,54 @@
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/config/db.php';
 
+// If already logged in
 if (isset($_SESSION['user_id'])) {
+    if (!empty($_SESSION['must_change_password'])) {
+        redirect('change_password.php');
+    }
     if (isAdmin()) redirect('index.php');
     if (isProductManager()) redirect('pm_dashboard.php');
+    if (isset($_SESSION['role']) && $_SESSION['role'] === 'rider') redirect('rider_login.php');
     redirect('customer_dashboard.php');
 }
 
-// Flash message after successful password reset (one-time)
 $resetSuccess  = false;
 $resetUsername = '';
 if (isset($_GET['reset']) && $_GET['reset'] === 'success') {
     $resetSuccess  = true;
     $resetUsername = $_SESSION['reset_success_username'] ?? '';
-    unset($_SESSION['reset_success_username']); // consume it
+    unset($_SESSION['reset_success_username']);
 }
 
-// If we need to auto-send an OTP after redirecting to verify page
-$sendOtpOnLoad  = false;
-$otpEmail       = '';
-$otpCode        = '';
-$otpName        = '';
-
+$sendOtpOnLoad = false;
+$otpEmail = ''; $otpCode = ''; $otpName = '';
 $error = '';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
 
     if ($username && $password) {
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ? AND status = 'active'");
+        // Only fetch non-rider accounts on this page
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ? AND status = 'active' AND role != 'rider' LIMIT 1");
         $stmt->execute([$username]);
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password'])) {
-            // Block unverified customers — send them a fresh OTP
+            // Block unverified customers
             if ($user['role'] === 'customer' && !$user['email_verified']) {
                 try {
-                    // Invalidate old register OTPs for this user
                     $pdo->prepare("UPDATE email_otps SET used = 1 WHERE user_id = ? AND purpose = 'register' AND used = 0")
                         ->execute([$user['id']]);
-
-                    // Generate a fresh register OTP — 2 minutes
-                    $otp       = generateOTP(6);
+                    $otp = generateOTP(6);
                     $expiresAt = date('Y-m-d H:i:s', strtotime('+2 minutes'));
-
-                    $pdo->prepare("
-                        INSERT INTO email_otps (user_id, email, otp_code, purpose, expires_at, used)
-                        VALUES (?, ?, ?, 'register', ?, 0)
-                    ")->execute([$user['id'], $user['email'], $otp, $expiresAt]);
+                    $pdo->prepare("INSERT INTO email_otps (user_id, email, otp_code, purpose, expires_at, used) VALUES (?, ?, ?, 'register', ?, 0)")
+                        ->execute([$user['id'], $user['email'], $otp, $expiresAt]);
 
                     $_SESSION['pending_verification_email'] = $user['email'];
                     $_SESSION['pending_verification_name']  = $user['full_name'] ?: $user['username'];
-
-                    // Flag EmailJS to send on this page before redirect
                     $sendOtpOnLoad = true;
-                    $otpEmail = $user['email'];
-                    $otpCode  = $otp;
-                    $otpName  = $user['full_name'] ?: $user['username'];
+                    $otpEmail = $user['email']; $otpCode = $otp; $otpName = $user['full_name'] ?: $user['username'];
                 } catch (Exception $e) {
                     $error = 'Could not send verification code. Please try again.';
                 }
@@ -67,16 +59,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['username']  = $user['username'];
                 $_SESSION['role']      = $user['role'];
                 $_SESSION['full_name'] = $user['full_name'];
+                $_SESSION['must_change_password'] = (int)($user['must_change_password'] ?? 0);
 
-                // Clear any stale pending verification session
                 unset($_SESSION['pending_verification_email'], $_SESSION['pending_verification_name']);
+
+                if (!empty($_SESSION['must_change_password'])) {
+                    redirect('change_password.php');
+                }
 
                 if ($user['role'] === 'admin') redirect('index.php');
                 if ($user['role'] === 'product_manager') redirect('pm_dashboard.php');
                 redirect('customer_dashboard.php');
             }
         } else {
-            $error = 'Invalid username or password.';
+            // Check if the username exists as a rider — give a helpful hint
+            $chk = $pdo->prepare("SELECT id FROM users WHERE username = ? AND role = 'rider' LIMIT 1");
+            $chk->execute([$username]);
+            if ($chk->fetch()) {
+                $error = 'Rider accounts must sign in from the Rider Portal → ' . baseUrl('rider_login.php');
+            } else {
+                $error = 'Invalid username or password.';
+            }
         }
     } else {
         $error = 'Please fill in all fields.';
@@ -93,292 +96,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; }
-        html, body {
-            margin: 0; padding: 0;
-            font-family: 'Inter', -apple-system, sans-serif;
-            -webkit-font-smoothing: antialiased;
-        }
-
-        .login-wrapper {
-            min-height: 100vh;
-            background: linear-gradient(135deg, #1e293b 0%, #111827 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 40px 20px;
-            position: relative;
-            overflow: hidden;
-        }
-        .login-wrapper::before {
-            content: '';
-            position: absolute;
-            top: -20%; right: -10%;
-            width: 600px; height: 600px;
-            background: radial-gradient(circle, rgba(37,99,235,0.18), transparent 60%);
-            pointer-events: none;
-        }
-        .login-wrapper::after {
-            content: '';
-            position: absolute;
-            bottom: -20%; left: -10%;
-            width: 500px; height: 500px;
-            background: radial-gradient(circle, rgba(29,78,216,0.15), transparent 60%);
-            pointer-events: none;
-        }
-
-        .login-card {
-            width: 100%;
-            max-width: 440px;
-            background: #fff;
-            border-radius: 20px;
-            padding: 44px 40px;
-            box-shadow: 0 30px 80px rgba(0,0,0,0.4);
-            position: relative;
-            z-index: 1;
-            overflow: hidden;
-        }
-        .login-card::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, #1e293b, #2563eb, #1d4ed8);
-        }
-
-        .login-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 5px 12px;
-            background: #eff6ff;
-            color: #1d4ed8;
-            border-radius: 999px;
-            font-size: 0.7rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            margin-bottom: 16px;
-        }
+        html, body { margin: 0; padding: 0; font-family: 'Inter', -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+        .login-wrapper { min-height: 100vh; background: linear-gradient(135deg, #1e293b 0%, #111827 100%); display: flex; align-items: center; justify-content: center; padding: 40px 20px; position: relative; overflow: hidden; }
+        .login-wrapper::before { content: ''; position: absolute; top: -20%; right: -10%; width: 600px; height: 600px; background: radial-gradient(circle, rgba(37,99,235,0.18), transparent 60%); pointer-events: none; }
+        .login-wrapper::after { content: ''; position: absolute; bottom: -20%; left: -10%; width: 500px; height: 500px; background: radial-gradient(circle, rgba(29,78,216,0.15), transparent 60%); pointer-events: none; }
+        .login-card { width: 100%; max-width: 440px; background: #fff; border-radius: 20px; padding: 44px 40px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); position: relative; z-index: 1; overflow: hidden; }
+        .login-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #1e293b, #2563eb, #1d4ed8); }
+        .login-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; background: #eff6ff; color: #1d4ed8; border-radius: 999px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; }
         .login-badge svg { width: 12px; height: 12px; }
-
-        .login-brand-logo {
-            width: 64px; height: 64px;
-            background: linear-gradient(135deg, #1e293b, #111827);
-            border-radius: 18px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #fff;
-            font-weight: 800;
-            font-size: 1.75rem;
-            margin-bottom: 20px;
-            box-shadow: 0 12px 28px rgba(17,24,39,0.32);
-            text-decoration: none;
-        }
-
+        .login-brand-logo { width: 64px; height: 64px; background: linear-gradient(135deg, #1e293b, #111827); border-radius: 18px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 1.75rem; margin-bottom: 20px; box-shadow: 0 12px 28px rgba(17,24,39,0.32); text-decoration: none; }
         .login-brand { margin-bottom: 28px; }
-        .login-brand h1 {
-            font-size: 1.5rem;
-            font-weight: 800;
-            color: #111827;
-            margin: 0 0 6px;
-            letter-spacing: -0.02em;
-        }
+        .login-brand h1 { font-size: 1.5rem; font-weight: 800; color: #111827; margin: 0 0 6px; letter-spacing: -0.02em; }
         .login-brand p { color: #6b7280; font-size: 0.9rem; margin: 0; }
-
         .form-group { margin-bottom: 18px; }
-        .form-label {
-            display: block;
-            font-size: 0.8rem;
-            font-weight: 600;
-            color: #374151;
-            margin-bottom: 6px;
-        }
+        .form-label { display: block; font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 6px; }
         .form-input-wrap { position: relative; }
-        .form-input {
-            width: 100%;
-            padding: 13px 44px 13px 14px;
-            border: 1.5px solid #e5e7eb;
-            border-radius: 10px;
-            font-size: 0.92rem;
-            color: #111827;
-            background: #fff;
-            font-family: inherit;
-            transition: all 0.15s;
-        }
-        .form-input:focus {
-            outline: none;
-            border-color: #2563eb;
-            box-shadow: 0 0 0 4px rgba(37,99,235,0.12);
-        }
+        .form-input { width: 100%; padding: 13px 44px 13px 14px; border: 1.5px solid #e5e7eb; border-radius: 10px; font-size: 0.92rem; color: #111827; background: #fff; font-family: inherit; transition: all 0.15s; }
+        .form-input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37,99,235,0.12); }
         .form-input.no-icon { padding-right: 14px; }
-
-        .toggle-pw {
-            position: absolute;
-            top: 50%; right: 10px;
-            transform: translateY(-50%);
-            background: transparent;
-            border: none;
-            cursor: pointer;
-            padding: 8px;
-            color: #9ca3af;
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.15s;
-        }
+        .toggle-pw { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); background: transparent; border: none; cursor: pointer; padding: 8px; color: #9ca3af; border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
         .toggle-pw:hover { color: #2563eb; background: #eff6ff; }
         .toggle-pw svg { width: 18px; height: 18px; }
-
-        .btn-login {
-            width: 100%;
-            padding: 14px;
-            background: linear-gradient(135deg, #1e293b, #111827);
-            color: #fff;
-            border: none;
-            border-radius: 10px;
-            font-size: 0.95rem;
-            font-weight: 700;
-            font-family: inherit;
-            cursor: pointer;
-            transition: all 0.15s;
-            box-shadow: 0 8px 24px rgba(17,24,39,0.32);
-            margin-top: 8px;
-        }
-        .btn-login:hover:not(:disabled) {
-            transform: translateY(-1px);
-            box-shadow: 0 12px 32px rgba(17,24,39,0.42);
-            background: linear-gradient(135deg, #111827, #1e293b);
-        }
+        .btn-login { width: 100%; padding: 14px; background: linear-gradient(135deg, #1e293b, #111827); color: #fff; border: none; border-radius: 10px; font-size: 0.95rem; font-weight: 700; font-family: inherit; cursor: pointer; transition: all 0.15s; box-shadow: 0 8px 24px rgba(17,24,39,0.32); margin-top: 8px; }
+        .btn-login:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 32px rgba(17,24,39,0.42); background: linear-gradient(135deg, #111827, #1e293b); }
         .btn-login:disabled { opacity: 0.7; cursor: not-allowed; }
-
-        .alert {
-            padding: 12px 16px;
-            border-radius: 10px;
-            font-size: 0.87rem;
-            margin-bottom: 20px;
-            border: 1px solid;
-        }
+        .alert { padding: 12px 16px; border-radius: 10px; font-size: 0.87rem; margin-bottom: 20px; border: 1px solid; }
         .alert-error { background: #fef2f2; color: #991b1b; border-color: #fca5a5; }
         .alert-success { background: #ecfdf5; color: #065f46; border-color: #6ee7b7; }
         .alert-info { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
-
-        .username-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 3px 10px;
-            background: #ffffff;
-            border: 1px solid #6ee7b7;
-            border-radius: 999px;
-            font-size: 0.78rem;
-            font-weight: 700;
-            color: #065f46;
-            margin-top: 6px;
-            font-family: 'SF Mono', Monaco, monospace;
-        }
+        .username-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; background: #ffffff; border: 1px solid #6ee7b7; border-radius: 999px; font-size: 0.78rem; font-weight: 700; color: #065f46; margin-top: 6px; font-family: 'SF Mono', Monaco, monospace; }
         .username-chip svg { width: 12px; height: 12px; }
-
-        .login-footer {
-            text-align: center;
-            margin-top: 24px;
-            padding-top: 20px;
-            border-top: 1px solid #f3f4f6;
-            color: #6b7280;
-            font-size: 0.83rem;
-        }
-        .login-footer a {
-            color: #2563eb;
-            font-weight: 600;
-            text-decoration: none;
-        }
-        .login-footer a:hover { text-decoration: underline; }
-
-        .register-section {
-            text-align: center;
-            margin-top: 22px;
-            padding-top: 22px;
-            border-top: 1px solid #f3f4f6;
-        }
-        .register-section p {
-            color: #6b7280;
-            font-size: 0.85rem;
-            margin: 0 0 12px;
-        }
-        .btn-secondary {
-            width: 100%;
-            padding: 12px;
-            background: #f3f4f6;
-            color: #1f2937;
-            border: 1.5px solid #e5e7eb;
-            border-radius: 10px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            font-family: inherit;
-            cursor: pointer;
-            transition: all 0.15s;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .btn-secondary:hover {
-            background: #e5e7eb;
-            border-color: #d1d5db;
-        }
-
-        .staff-link {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            margin-top: 14px;
-            font-size: 0.78rem;
-            color: #9ca3af;
-            text-decoration: none;
-            padding: 8px 14px;
-            border-radius: 8px;
-            transition: all 0.15s;
-        }
-        .staff-link:hover { color: #2563eb; background: #eff6ff; }
-        .staff-link svg { width: 13px; height: 13px; }
-
-        .security-note {
-            background: #f4f7fb;
-            border-radius: 8px;
-            padding: 10px 12px;
-            font-size: 0.72rem;
-            color: #6b7280;
-            margin-top: 20px;
-            text-align: center;
-            line-height: 1.5;
-        }
-
-        .back-home {
-            text-align: center;
-            margin-top: 18px;
-        }
-        .back-home a {
-            color: #6b7280;
-            font-size: 0.83rem;
-            text-decoration: none;
-            transition: color 0.15s;
-        }
+        .register-section { text-align: center; margin-top: 22px; padding-top: 22px; border-top: 1px solid #f3f4f6; }
+        .register-section p { color: #6b7280; font-size: 0.85rem; margin: 0 0 12px; }
+        .btn-secondary { width: 100%; padding: 12px; background: #f3f4f6; color: #1f2937; border: 1.5px solid #e5e7eb; border-radius: 10px; font-size: 0.9rem; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.15s; text-decoration: none; display: inline-block; }
+        .btn-secondary:hover { background: #e5e7eb; border-color: #d1d5db; }
+        .security-note { background: #f4f7fb; border-radius: 8px; padding: 10px 12px; font-size: 0.72rem; color: #6b7280; margin-top: 20px; text-align: center; line-height: 1.5; }
+        .back-home { text-align: center; margin-top: 18px; }
+        .back-home a { color: #6b7280; font-size: 0.83rem; text-decoration: none; }
         .back-home a:hover { color: #2563eb; }
-
-        /* Forgot password link */
-        .forgot-row {
-            display: flex;
-            justify-content: flex-end;
-            margin-top: -8px;
-            margin-bottom: 14px;
-        }
-        .forgot-link {
-            color: #2563eb;
-            font-size: 0.8rem;
-            font-weight: 600;
-            text-decoration: none;
-            transition: color 0.15s;
-        }
+        .forgot-row { display: flex; justify-content: flex-end; margin-top: -8px; margin-bottom: 14px; }
+        .forgot-link { color: #2563eb; font-size: 0.8rem; font-weight: 600; text-decoration: none; }
         .forgot-link:hover { color: #1d4ed8; text-decoration: underline; }
+        .rider-portal-link {
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            margin-top: 16px; padding-top: 16px;
+            border-top: 1px solid #f3f4f6;
+        }
+        .rider-portal-link a {
+            color: #059669; font-size: 0.85rem; font-weight: 700;
+            text-decoration: none;
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 14px; border-radius: 8px;
+            transition: background 0.15s;
+        }
+        .rider-portal-link a:hover { background: #ecfdf5; text-decoration: none; }
     </style>
 </head>
 <body>
@@ -386,14 +157,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="login-card">
             <div class="login-badge">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                Customer Portal
+                Portal Login
             </div>
 
             <a href="<?= baseUrl('landing.php') ?>" class="login-brand-logo">E</a>
 
             <div class="login-brand">
                 <h1>Welcome Back</h1>
-                <p>Sign in to your customer account</p>
+                <p>Sign in to your account</p>
             </div>
 
             <?php if ($error): ?>
@@ -409,8 +180,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
                             <?= e($resetUsername) ?>
                         </div>
-                    <?php else: ?>
-                        Please sign in with your new password.
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
@@ -447,6 +216,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <a href="<?= baseUrl('auth/register.php') ?>" class="btn-secondary">Create an Account</a>
             </div>
 
+            <div class="rider-portal-link">
+                <a href="<?= baseUrl('rider_login.php') ?>">🛵 Rider Portal Login →</a>
+            </div>
+
             <div class="security-note">
                 🔒 Your connection is secure. We never share your personal information.
             </div>
@@ -457,12 +230,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
-    <!-- EmailJS SDK -->
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
     <script>
-    (function() {
-        emailjs.init("3wNkVwO4O9bDjbwoz"); // ← Your public key
-    })();
+    (function() { emailjs.init("3wNkVwO4O9bDjbwoz"); })();
 
     function togglePassword(id, btn) {
         const inp = document.getElementById(id);
@@ -476,30 +246,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     <?php if ($sendOtpOnLoad): ?>
-    // Login detected an unverified customer — auto-send OTP via EmailJS, then redirect to verify page
     document.addEventListener('DOMContentLoaded', async function() {
         const btn = document.getElementById('loginBtn');
-        const form = document.getElementById('loginForm');
         const note = document.getElementById('otpSendingNote');
-
         btn.disabled = true;
         btn.textContent = 'Sending verification code...';
         note.style.display = 'block';
 
         try {
-            await emailjs.send(
-                'service_h6zywtr',   // ← Your service ID
-                'template_s050h21',  // ← Your template ID
-                {
-                    email:    <?= json_encode($otpEmail) ?>,
-                    passcode: <?= json_encode($otpCode) ?>,
-                    name:     <?= json_encode($otpName) ?>
-                }
-            );
+            await emailjs.send('service_h6zywtr', 'template_s050h21', {
+                email: <?= json_encode($otpEmail) ?>,
+                passcode: <?= json_encode($otpCode) ?>,
+                name: <?= json_encode($otpName) ?>
+            });
             window.location.href = '<?= baseUrl('auth/verify_otp.php?sent=1') ?>';
         } catch (err) {
-            console.error('EmailJS error:', err);
-            alert('Could not send the verification email. Please try again.');
+            alert('Could not send the verification email.');
             btn.disabled = false;
             btn.textContent = 'Sign In';
             note.style.display = 'none';

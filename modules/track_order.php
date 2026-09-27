@@ -9,8 +9,18 @@ $uid = $_SESSION['user_id'];
 $orderId = (int)($_GET['id'] ?? 0);
 if (!$orderId) redirectRoot('customer_dashboard.php');
 
-// Fetch order and verify ownership
-$stmt = $pdo->prepare("SELECT o.*, u.username, u.email, u.phone FROM orders o JOIN users u ON o.user_id=u.id WHERE o.id = ?");
+// Fetch order with rider info joined
+$stmt = $pdo->prepare("
+    SELECT o.*, u.username, u.email, u.phone,
+           r.full_name AS rider_name,
+           r.phone     AS rider_phone,
+           r.vehicle_type AS rider_vehicle,
+           r.plate_number AS rider_plate
+    FROM orders o
+    JOIN users u ON o.user_id = u.id
+    LEFT JOIN riders r ON o.rider_id = r.id
+    WHERE o.id = ?
+");
 $stmt->execute([$orderId]);
 $order = $stmt->fetch();
 
@@ -33,7 +43,7 @@ $tracking = $pdo->prepare("SELECT * FROM order_tracking WHERE order_id = ? ORDER
 $tracking->execute([$orderId]);
 $trackingHistory = $tracking->fetchAll();
 
-// If no tracking records exist, generate defaults
+// Fallback to default timeline if no tracking records
 if (empty($trackingHistory)) {
     $stageOrder = ['pending'=>1,'processing'=>2,'shipped'=>3,'delivered'=>4,'cancelled'=>5,'returned'=>5];
     $currentStage = $stageOrder[$order['status']] ?? 1;
@@ -56,6 +66,11 @@ if (empty($trackingHistory)) {
         }
     }
 }
+
+// Fetch proof of delivery if delivered
+$proof = $pdo->prepare("SELECT * FROM delivery_proofs WHERE order_id = ? ORDER BY id DESC LIMIT 1");
+$proof->execute([$orderId]);
+$proof = $proof->fetch();
 
 $progressStages = [
     ['key' => 'pending',    'label' => 'Order Placed',  'icon' => '📋'],
@@ -100,7 +115,114 @@ require_once __DIR__ . '/../includes/header.php';
 .track-log-item { display: flex; gap: 16px; padding: 16px 0; border-bottom: 1px solid #f3f4f6; }
 .track-log-item:last-child { border-bottom: none; }
 .track-log-dot { width: 12px; height: 12px; border-radius: 50%; background: #2563eb; flex-shrink: 0; margin-top: 6px; box-shadow: 0 0 0 4px rgba(37,99,235,0.15); }
-@media (max-width: 640px) { .track-stage-label { font-size: 0.7rem; } .track-stage-circle { width: 38px; height: 38px; font-size: 1rem; } .track-timeline::before, .track-progress-line { top: 19px; left: 20px; right: 20px; } }
+
+/* Rider card */
+.rider-card {
+    background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
+    border: 1px solid #bfdbfe;
+    border-left: 4px solid #2563eb;
+    border-radius: 14px;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 14px rgba(37,99,235,0.08);
+}
+.rider-avatar-lg {
+    width: 64px; height: 64px;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #fff; border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.6rem;
+    flex-shrink: 0;
+    box-shadow: 0 8px 20px rgba(37,99,235,0.3);
+}
+.rider-info { flex: 1; min-width: 200px; }
+.rider-info .lbl {
+    font-size: 0.72rem; font-weight: 700;
+    color: #1d4ed8; text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.rider-info .name {
+    font-size: 1.2rem; font-weight: 800;
+    color: #111827; margin: 4px 0;
+}
+.rider-info .meta { color: #6b7280; font-size: 0.85rem; }
+.rider-contact { text-align: right; }
+.rider-contact .lbl {
+    font-size: 0.72rem; font-weight: 700;
+    color: #1d4ed8; text-transform: uppercase;
+    letter-spacing: 0.08em; margin-bottom: 6px;
+}
+.rider-contact a {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 18px; border-radius: 10px;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #fff; font-weight: 700; font-size: 0.9rem;
+    text-decoration: none;
+    box-shadow: 0 6px 16px rgba(37,99,235,0.3);
+    transition: all 0.15s;
+}
+.rider-contact a:hover { transform: translateY(-1px); box-shadow: 0 10px 22px rgba(37,99,235,0.4); }
+
+/* Proof card */
+.proof-card {
+    background: linear-gradient(135deg, #ecfdf5 0%, #ffffff 100%);
+    border: 1px solid #a7f3d0;
+    border-left: 4px solid #10b981;
+    border-radius: 14px;
+    padding: 22px;
+    margin-bottom: 24px;
+}
+.proof-title {
+    color: #065f46; font-weight: 800; font-size: 1.05rem;
+    margin: 0 0 16px; display: flex; align-items: center; gap: 8px;
+}
+.proof-photos { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 16px; }
+.proof-photo {
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #a7f3d0;
+    background: #fff;
+}
+.proof-photo img { width: 100%; display: block; max-height: 280px; object-fit: cover; cursor: zoom-in; }
+.proof-photo .cap {
+    padding: 8px 12px; font-size: 0.72rem; font-weight: 700;
+    color: #065f46; background: #ecfdf5;
+    text-transform: uppercase; letter-spacing: 0.05em;
+}
+.proof-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.proof-stat {
+    background: #ecfdf5; border-radius: 10px; padding: 12px 14px;
+    border: 1px solid #a7f3d0;
+}
+.proof-stat .lbl {
+    font-size: 0.68rem; font-weight: 700; color: #065f46;
+    text-transform: uppercase; letter-spacing: 0.05em;
+}
+.proof-stat .val {
+    font-size: 1.15rem; font-weight: 800; color: #065f46;
+    margin-top: 4px;
+}
+
+/* Lightbox */
+.lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 9999; display: none; align-items: center; justify-content: center; padding: 20px; }
+.lightbox.active { display: flex; }
+.lightbox img { max-width: 92vw; max-height: 88vh; border-radius: 12px; }
+.lightbox-close { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.15); color: #fff; border: none; width: 42px; height: 42px; border-radius: 50%; cursor: pointer; font-size: 22px; }
+
+@media (max-width: 640px) {
+    .track-stage-label { font-size: 0.7rem; }
+    .track-stage-circle { width: 38px; height: 38px; font-size: 1rem; }
+    .track-timeline::before, .track-progress-line { top: 19px; left: 20px; right: 20px; }
+    .rider-card { padding: 16px; }
+    .rider-avatar-lg { width: 52px; height: 52px; font-size: 1.3rem; }
+    .rider-info .name { font-size: 1.05rem; }
+    .rider-contact { width: 100%; text-align: left; }
+    .proof-stats { grid-template-columns: 1fr; }
+}
 </style>
 
 <div class="app-layout">
@@ -149,6 +271,72 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             <?php endif; ?>
 
+            <!-- ===================== RIDER CARD ===================== -->
+            <?php if (!empty($order['rider_name']) && in_array($order['status'], ['shipped','delivered'])): ?>
+                <div class="rider-card">
+                    <div class="rider-avatar-lg">🛵</div>
+                    <div class="rider-info">
+                        <div class="lbl">Your Delivery Rider</div>
+                        <div class="name"><?= e($order['rider_name']) ?></div>
+                        <div class="meta">
+                            <?= e($order['rider_vehicle'] ?: 'Motorcycle') ?>
+                            <?php if (!empty($order['rider_plate'])): ?>
+                                · Plate <?= e($order['rider_plate']) ?>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <div class="rider-contact">
+                        <div class="lbl">Contact</div>
+                        <a href="tel:<?= e($order['rider_phone']) ?>">
+                            📞 <?= e($order['rider_phone']) ?>
+                        </a>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <!-- ===================== PROOF OF DELIVERY ===================== -->
+            <?php if ($proof && $order['status'] === 'delivered'): ?>
+                <div class="proof-card">
+                    <h3 class="proof-title">✅ Proof of Delivery</h3>
+
+                    <div class="proof-photos">
+                        <div class="proof-photo">
+                            <img src="<?= baseUrl($proof['parcel_photo']) ?>"
+                                 alt="Parcel photo"
+                                 onclick="openLightbox('<?= baseUrl($proof['parcel_photo']) ?>')">
+                            <div class="cap">📷 Parcel Photo</div>
+                        </div>
+                        <?php if (!empty($proof['payment_photo'])): ?>
+                            <div class="proof-photo">
+                                <img src="<?= baseUrl($proof['payment_photo']) ?>"
+                                     alt="Payment photo"
+                                     onclick="openLightbox('<?= baseUrl($proof['payment_photo']) ?>')">
+                                <div class="cap">💰 Payment Photo</div>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+
+                    <div class="proof-stats">
+                        <div class="proof-stat">
+                            <div class="lbl">Amount Collected</div>
+                            <div class="val">₱<?= number_format($proof['amount_collected'], 2) ?></div>
+                        </div>
+                        <div class="proof-stat">
+                            <div class="lbl">Received By</div>
+                            <div class="val" style="font-size:1rem;"><?= e($proof['recipient_name'] ?: $order['username']) ?></div>
+                        </div>
+                    </div>
+
+                    <?php if (!empty($proof['notes'])): ?>
+                        <div style="margin-top:14px;padding:12px 14px;background:#fff;border:1px solid #a7f3d0;border-radius:10px;">
+                            <div class="lbl" style="font-size:0.7rem;font-weight:700;color:#065f46;text-transform:uppercase;letter-spacing:0.05em;">Notes</div>
+                            <div style="color:#374151;font-size:0.88rem;margin-top:4px;"><?= nl2br(e($proof['notes'])) ?></div>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+
+            <!-- ===================== PAYMENT ALERTS ===================== -->
             <?php if ($order['payment_status'] === 'unpaid' && !in_array($order['status'], ['cancelled','returned'])): ?>
                 <div class="card card-pad" style="border-left:4px solid #dc2626;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
                     <div>
@@ -164,6 +352,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             <?php endif; ?>
 
+            <!-- ===================== ORDER + SHIPPING ===================== -->
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;">
                 <div class="card card-pad">
                     <h3 class="section-title" style="margin-bottom:16px;">📦 Order Information</h3>
@@ -192,6 +381,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
 
+            <!-- ===================== ITEMS ===================== -->
             <div class="card" style="margin-bottom:24px;">
                 <div style="padding:20px 24px;border-bottom:1px solid #e5e7eb;">
                     <h3 class="section-title">Items Ordered</h3>
@@ -228,6 +418,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
 
+            <!-- ===================== ACTIVITY LOG ===================== -->
             <div class="card card-pad">
                 <h3 class="section-title" style="margin-bottom:16px;">📋 Activity Log</h3>
                 <?php if (empty($trackingHistory)): ?>
@@ -252,3 +443,22 @@ require_once __DIR__ . '/../includes/header.php';
         <?php require __DIR__ . '/../includes/footer.php'; ?>
     </div>
 </div>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" onclick="if(event.target.id==='lightbox')closeLightbox()">
+    <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+    <img id="lightboxImg" src="" alt="">
+</div>
+
+<script>
+function openLightbox(url) {
+    document.getElementById('lightboxImg').src = url;
+    document.getElementById('lightbox').classList.add('active');
+}
+function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('active');
+}
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeLightbox();
+});
+</script>

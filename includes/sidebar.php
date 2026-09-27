@@ -7,7 +7,13 @@ $initial = strtoupper(substr($_SESSION['full_name'] ?? $_SESSION['username'] ?? 
         <div class="sidebar-logo">E</div>
         <div class="sidebar-brand-text">
             <h1>E-Commerce Core</h1>
-            <p><?= $role === 'admin' ? 'Admin Panel' : ($role === 'product_manager' ? 'Product Manager' : 'Customer Portal') ?></p>
+            <p><?php
+                echo $role === 'admin' ? 'Admin Panel' : (
+                    $role === 'product_manager' ? 'Product Manager' : (
+                        $role === 'rider' ? 'Rider Portal' : 'Customer Portal'
+                    )
+                );
+            ?></p>
         </div>
     </div>
 
@@ -41,6 +47,16 @@ $initial = strtoupper(substr($_SESSION['full_name'] ?? $_SESSION['username'] ?? 
                 Reports
             </a>
 
+            <div class="sidebar-section-label">Delivery</div>
+            <a href="<?= baseUrl('modules/riders.php') ?>" class="sidebar-link <?= isActive('riders.php') ?>">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+                Riders
+            </a>
+            <a href="<?= baseUrl('modules/deliveries.php') ?>" class="sidebar-link <?= isActive('deliveries.php') ?>">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                Deliveries
+            </a>
+
             <div class="sidebar-section-label">Communication</div>
             <a href="<?= baseUrl('modules/staff_chat.php') ?>" class="sidebar-link <?= isActive('staff_chat.php') ?>">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
@@ -68,10 +84,31 @@ $initial = strtoupper(substr($_SESSION['full_name'] ?? $_SESSION['username'] ?? 
                 Returns
             </a>
 
+            <div class="sidebar-section-label">Delivery</div>
+            <a href="<?= baseUrl('modules/riders.php') ?>" class="sidebar-link <?= isActive('riders.php') ?>">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+                Riders
+            </a>
+            <a href="<?= baseUrl('modules/deliveries.php') ?>" class="sidebar-link <?= isActive('deliveries.php') ?>">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                Deliveries
+            </a>
+
             <div class="sidebar-section-label">Communication</div>
             <a href="<?= baseUrl('modules/staff_chat.php') ?>" class="sidebar-link <?= isActive('staff_chat.php') ?>">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
                 Customer Messages
+            </a>
+
+        <?php elseif ($role === 'rider'): ?>
+            <div class="sidebar-section-label">Rider Portal</div>
+            <a href="<?= baseUrl('rider_dashboard.php') ?>" class="sidebar-link <?= isActive('rider_dashboard.php') ?>">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                Dashboard
+            </a>
+            <a href="<?= baseUrl('rider_delivery.php') ?>" class="sidebar-link <?= isActive('rider_delivery.php') ?>">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                My Deliveries
             </a>
 
         <?php else: /* customer */ ?>
