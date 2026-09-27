@@ -254,7 +254,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 Resend Code
             </button>
             <div style="margin-top:16px;">
-                <a href="<?= baseUrl('register.php') ?>">← Use a different email</a>
+                <a href="<?= baseUrl('auth/register.php') ?>">← Use a different email</a>
             </div>
         </div>
     </div>
