@@ -158,28 +158,28 @@ require_once __DIR__ . '/../includes/header.php';
                                         Send exactly <strong style="color:#1d4ed8;">₱<?= number_format($order['total_amount'], 2) ?></strong>
                                     </p>
 
-                                    <img src="<?= baseUrl('assets/img/gcash_qr.jpg') ?>" alt="GCash QR Code"
+                                    <img src="<?= baseUrl('assets/img/qr.png') ?>" alt="GCash QR Code"
                                          onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
                                     <div style="display:none; padding:30px; background:#f4f7fb; border-radius:12px;">
                                         <div style="font-size:2rem; margin-bottom:8px;">📱</div>
                                         <div style="color:#6b7280; font-size:.85rem;">
                                             Add your GCash QR image to<br>
-                                            <code style="background:#fff;padding:2px 6px;border-radius:4px;">assets/img/gcash_qr.jpg</code>
+                                            <code style="background:#fff;padding:2px 6px;border-radius:4px;">assets/img/qr.png</code>
                                         </div>
                                     </div>
 
                                     <div class="gcash-detail-box">
                                         <div class="gcash-detail-row">
                                             <span class="label">Account Name</span>
-                                            <span class="value">Carlos Mavean Estrera</span>
+                                            <span class="value">Jerlex Navarez</span>
                                         </div>
                                         <div class="gcash-detail-row">
                                             <span class="label">GCash Number</span>
-                                            <span class="value">0927 887 8724 <button type="button" class="copy-btn" onclick="copyText('09278878724', this)">Copy</button></span>
+                                            <span class="value">0907 071 1902 <button type="button" class="copy-btn" onclick="copyText('09070711902', this)">Copy</button></span>
                                         </div>
                                         <div class="gcash-detail-row">
                                             <span class="label">Amount</span>
-                                            <span class="value" style="color:#1d4ed8;">₱<?= number_format($order['total_amount'], 2) ?> <button type="button" class="copy-btn" onclick="copyText('<?= number_format($order['total_amount'], 2, '.', '') ?>', this)">Copy</button></span>
+                                            <span class="value" style="color:#1d4ed8;">₱<?= number_format($order['total_amount'], 2) ?> </span>
                                         </div>
                                     </div>
                                 </div>
