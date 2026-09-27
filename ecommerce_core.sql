@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Sep 26, 2026 at 12:27 PM
+-- Generation Time: Sep 27, 2026 at 10:48 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.0.30
 
@@ -43,11 +43,12 @@ CREATE TABLE `email_otps` (
 --
 
 INSERT INTO `email_otps` (`id`, `user_id`, `email`, `otp_code`, `purpose`, `expires_at`, `used`, `created_at`) VALUES
-(1, 4, 'estreracarlosmavean17@gmail.com', '722593', 'register', '2026-09-25 06:55:56', 0, '2026-09-25 04:45:56'),
 (2, 5, 'christianjoco03@gmail.com', '118182', 'register', '2026-09-25 06:58:40', 0, '2026-09-25 04:48:40'),
 (3, 6, 'yengmavean@gmail.com', '636414', 'register', '2026-09-25 13:06:39', 1, '2026-09-25 04:56:39'),
 (5, 9, 'cerbitomarkie5@gmail.com', '928589', 'register', '2026-09-26 18:27:54', 1, '2026-09-26 10:17:54'),
-(6, 10, 'jhonaarro55@gmail.com', '360147', 'register', '2026-09-26 18:34:02', 1, '2026-09-26 10:24:02');
+(6, 10, 'jhonaarro55@gmail.com', '360147', 'register', '2026-09-26 18:34:02', 1, '2026-09-26 10:24:02'),
+(8, 12, 'cerbitomarkie5@gmail.com', '897834', 'register', '2026-09-27 12:59:20', 0, '2026-09-27 04:49:20'),
+(9, 13, 'estreracarlosmavean17@gmail.com', '323063', 'register', '2026-09-27 16:51:47', 1, '2026-09-27 08:41:47');
 
 -- --------------------------------------------------------
 
@@ -192,6 +193,23 @@ CREATE TABLE `product_embeddings` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `product_reviews`
+--
+
+CREATE TABLE `product_reviews` (
+  `id` int(11) NOT NULL,
+  `product_id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `order_id` int(11) DEFAULT NULL,
+  `rating` tinyint(1) NOT NULL CHECK (`rating` between 1 and 5),
+  `review_text` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `returns`
 --
 
@@ -237,11 +255,11 @@ INSERT INTO `users` (`id`, `username`, `email`, `phone`, `address`, `city`, `pro
 (1, 'admin', 'admin@ecommerce.com', NULL, NULL, NULL, NULL, NULL, '$2y$10$Ef/Wi80jY5/NNIUO7kH0yen37ffqmNgdAjL5J1DyTpsJ1tmJSiWrm', 'System Admin', 'admin', 'active', 1, 1, '2026-09-24 14:21:26'),
 (2, 'customer', 'customer@test.com', '09171234567', '123 Sample Street', 'Manila', 'Metro Manila', '1000', '$2y$10$Hbb7sYr3zAFyikF2QDWqq.O7EKKfmvFdxbREHIEXWtf4SD5qv8hPu', 'John Doe', 'customer', 'active', 1, 1, '2026-09-24 14:22:10'),
 (3, 'pm', 'pm@ecommerce.com', NULL, NULL, NULL, NULL, NULL, '$2y$10$QVuImCrj3wRU1a3NSF46Y.k0f81uJXm6wkj2BGhF5EF2Y3gizDCyy', 'Product Manager', 'product_manager', 'active', 1, 1, '2026-09-25 03:50:52'),
-(4, 'Carlos', 'estreracarlosmavean17@gmail.com', '09278878724', 'PHASE 3 AREA A ACORDA ST. PAYATAS LUPANG PANGAKO QUEZON CITY', 'QUEZON CITY', 'METRO MANILA', '1119', '$2y$10$EmsOCFvX/OYratMNpaydiunNrFBCMEdnX1oMAalQuuum6f7cvRUFe', 'ESTRERA, CARLOS MAVEAN L.', 'customer', 'active', 0, 1, '2026-09-25 04:45:56'),
 (5, 'Christian', 'christianjoco03@gmail.com', '09278878724', 'PHASE 3 AREA A ACORDA ST. PAYATAS LUPANG PANGAKO QUEZON CITY', 'QUEZON CITY', 'METRO MANILA', '1119', '$2y$10$tMsKzLyBt3NYT8Ym/btk/OAVlTQpTPSJGp5eq.s/aYpu28oULE2uK', 'Christian joco', 'customer', 'active', 0, 1, '2026-09-25 04:48:40'),
 (6, 'Mavean', 'yengmavean@gmail.com', '09278878724', 'PHASE 3 AREA A ACORDA ST. PAYATAS LUPANG PANGAKO QUEZON CITY', 'QUEZON CITY', 'METRO MANILA', '1119', '$2y$10$h0Itr0qTZUxpmF8PAHGu7OLGJsRG0nVN/0S0Io0MF6/tD2M73mz5W', 'ESTRERA, CARLOS MAVEAN L.', 'customer', 'active', 1, 1, '2026-09-25 04:56:39'),
-(9, 'mark', 'cerbitomarkie5@gmail.com', '09278878724', 'PHASE 3 AREA A ACORDA ST. PAYATAS LUPANG PANGAKO QUEZON CITY', 'QUEZON CITY', 'METRO MANILA', '1119', '$2y$10$7NJE5lmz17TWw.XWi4BwO.3J43nzy0jEhGMl0qLhSloR.mQ8RSP6a', 'mark', 'customer', 'active', 1, 1, '2026-09-26 10:17:54'),
-(10, 'Jhona', 'jhonaarro55@gmail.com', '09278878724', 'PHASE 3 AREA A ACORDA ST. PAYATAS LUPANG PANGAKO QUEZON CITY', 'QUEZON CITY', 'METRO MANILA', '1119', '$2y$10$YIatnTNzbCpK3WaVAWxEAur9nKD4rw6usq3Bz6jtfea5SUX/ugqq2', 'Jhona Arro', 'customer', 'active', 1, 1, '2026-09-26 10:24:02');
+(10, 'Jhona', 'jhonaarro55@gmail.com', '09278878724', 'PHASE 3 AREA A ACORDA ST. PAYATAS LUPANG PANGAKO QUEZON CITY', 'QUEZON CITY', 'METRO MANILA', '1119', '$2y$10$YIatnTNzbCpK3WaVAWxEAur9nKD4rw6usq3Bz6jtfea5SUX/ugqq2', 'Jhona Arro', 'customer', 'active', 1, 1, '2026-09-26 10:24:02'),
+(12, 'markc', 'cerbitomarkie5@gmail.com', '09278878724', 'PHASE 3 AREA A ACORDA ST. PAYATAS LUPANG PANGAKO QUEZON CITY', 'QUEZON CITY', 'METRO MANILA', '1119', '$2y$10$BKOj.DkAu/wMT35c25s8ZOaa.FfqM5pG9K.Onl3ltEKoqnZREru/S', 'mark', 'customer', 'active', 0, 1, '2026-09-27 04:49:20'),
+(13, 'caloy', 'estreracarlosmavean17@gmail.com', '09278878724', 'PHASE 3 AREA A ACORDA ST. PAYATAS LUPANG PANGAKO QUEZON CITY', 'QUEZON CITY', 'METRO MANILA', '1119', '$2y$10$WQiW5YMcib14GyG2wTyH0uggNv8ET1OANr66J440hf95kKQlWll0m', 'ESTRERA, CARLOS MAVEAN L.', 'customer', 'active', 1, 1, '2026-09-27 08:41:47');
 
 --
 -- Indexes for dumped tables
@@ -288,6 +306,15 @@ ALTER TABLE `product_embeddings`
   ADD UNIQUE KEY `product_id` (`product_id`);
 
 --
+-- Indexes for table `product_reviews`
+--
+ALTER TABLE `product_reviews`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `user_product` (`user_id`,`product_id`),
+  ADD KEY `product_id` (`product_id`),
+  ADD KEY `user_id` (`user_id`);
+
+--
 -- Indexes for table `returns`
 --
 ALTER TABLE `returns`
@@ -309,7 +336,7 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `email_otps`
 --
 ALTER TABLE `email_otps`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
 
 --
 -- AUTO_INCREMENT for table `orders`
@@ -342,6 +369,12 @@ ALTER TABLE `product_embeddings`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `product_reviews`
+--
+ALTER TABLE `product_reviews`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `returns`
 --
 ALTER TABLE `returns`
@@ -351,7 +384,7 @@ ALTER TABLE `returns`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

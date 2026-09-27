@@ -1,4 +1,8 @@
 <?php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+
 $host = 'localhost';
 $db   = 'ecommerce_core';
 $user = 'root';
@@ -14,8 +18,6 @@ $options = [
 
 try {
     $pdo = new PDO($dsn, $user, $pass, $options);
-
-    // Force MySQL session to use Manila timezone (matches PHP)
     $pdo->exec("SET time_zone = '+08:00'");
 } catch (\PDOException $e) {
     die("Database connection failed: " . $e->getMessage());
