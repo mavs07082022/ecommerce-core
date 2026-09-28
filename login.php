@@ -2,17 +2,18 @@
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/config/db.php';
 
-// If already logged in
+// If already logged in, send each role to its proper home
 if (isset($_SESSION['user_id'])) {
     if (!empty($_SESSION['must_change_password'])) {
         redirect('change_password.php');
     }
-    if (isAdmin()) redirect('index.php');
-    if (isProductManager()) redirect('pm_dashboard.php');
-    if (isset($_SESSION['role']) && $_SESSION['role'] === 'rider') redirect('rider_login.php');
+    if (isAdmin()) redirect('admin/index.php');
+    if (isProductManager()) redirect('admin/index.php');
+    if (isset($_SESSION['role']) && $_SESSION['role'] === 'rider') redirect('rider_dashboard.php');
     redirect('customer_dashboard.php');
 }
 
+// After a successful password reset, show flash
 $resetSuccess  = false;
 $resetUsername = '';
 if (isset($_GET['reset']) && $_GET['reset'] === 'success') {
@@ -30,14 +31,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
 
     if ($username && $password) {
-        // Only fetch non-rider accounts on this page
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ? AND status = 'active' AND role != 'rider' LIMIT 1");
+        // ── ONLY customers can log in here ──
+        // We do NOT filter by role in SQL, because we want to give the
+        // same generic error whether the account exists or has a wrong role.
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ? LIMIT 1");
         $stmt->execute([$username]);
         $user = $stmt->fetch();
 
-        if ($user && password_verify($password, $user['password'])) {
-            // Block unverified customers
-            if ($user['role'] === 'customer' && !$user['email_verified']) {
+        // Verify: user exists + password correct + role IS customer + active
+        $validCredentials = $user
+            && password_verify($password, $user['password'])
+            && $user['role'] === 'customer'
+            && $user['status'] === 'active';
+
+        if (!$validCredentials) {
+            // Same generic message for: wrong username, wrong password,
+            // admin account, PM account, rider account, inactive account.
+            $error = 'Invalid username or password.';
+        } else {
+            // Block unverified customers → resend OTP
+            if (!$user['email_verified']) {
                 try {
                     $pdo->prepare("UPDATE email_otps SET used = 1 WHERE user_id = ? AND purpose = 'register' AND used = 0")
                         ->execute([$user['id']]);
@@ -66,19 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!empty($_SESSION['must_change_password'])) {
                     redirect('change_password.php');
                 }
-
-                if ($user['role'] === 'admin') redirect('index.php');
-                if ($user['role'] === 'product_manager') redirect('pm_dashboard.php');
                 redirect('customer_dashboard.php');
-            }
-        } else {
-            // Check if the username exists as a rider — give a helpful hint
-            $chk = $pdo->prepare("SELECT id FROM users WHERE username = ? AND role = 'rider' LIMIT 1");
-            $chk->execute([$username]);
-            if ($chk->fetch()) {
-                $error = 'Rider accounts must sign in from the Rider Portal → ' . baseUrl('rider_login.php');
-            } else {
-                $error = 'Invalid username or password.';
             }
         }
     } else {
@@ -137,19 +138,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .forgot-row { display: flex; justify-content: flex-end; margin-top: -8px; margin-bottom: 14px; }
         .forgot-link { color: #2563eb; font-size: 0.8rem; font-weight: 600; text-decoration: none; }
         .forgot-link:hover { color: #1d4ed8; text-decoration: underline; }
-        .rider-portal-link {
-            display: flex; align-items: center; justify-content: center; gap: 8px;
-            margin-top: 16px; padding-top: 16px;
-            border-top: 1px solid #f3f4f6;
-        }
-        .rider-portal-link a {
-            color: #059669; font-size: 0.85rem; font-weight: 700;
-            text-decoration: none;
-            display: inline-flex; align-items: center; gap: 6px;
-            padding: 8px 14px; border-radius: 8px;
-            transition: background 0.15s;
-        }
-        .rider-portal-link a:hover { background: #ecfdf5; text-decoration: none; }
     </style>
 </head>
 <body>
@@ -157,14 +145,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="login-card">
             <div class="login-badge">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                Portal Login
+                Customer Portal
             </div>
 
             <a href="<?= baseUrl('landing.php') ?>" class="login-brand-logo">E</a>
 
             <div class="login-brand">
                 <h1>Welcome Back</h1>
-                <p>Sign in to your account</p>
+                <p>Sign in to your customer account</p>
             </div>
 
             <?php if ($error): ?>
@@ -215,8 +203,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <p>New customer?</p>
                 <a href="<?= baseUrl('auth/register.php') ?>" class="btn-secondary">Create an Account</a>
             </div>
-
-            
 
             <div class="security-note">
                 🔒 Your connection is secure. We never share your personal information.

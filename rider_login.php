@@ -2,23 +2,38 @@
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/config/db.php';
 
-// If already logged in as rider → send them onward
-if (isset($_SESSION['user_id']) && $_SESSION['role'] === 'rider') {
-    if (!empty($_SESSION['must_change_password'])) {
-        redirect('change_password.php');
-    }
-    redirect('rider_dashboard.php');
-}
-
-// If logged in as another role, send them to their own area
+// ─────────────────────────────────────────────────────────────
+// If ANY session exists on this page:
+//   - If it's a RIDER session → send to rider dashboard
+//   - Anything else (customer, admin, PM) → destroy it
+//     so the visitor can only sign in as a rider here
+// ─────────────────────────────────────────────────────────────
 if (isset($_SESSION['user_id'])) {
-    if ($_SESSION['role'] === 'admin') redirect('index.php');
-    if ($_SESSION['role'] === 'product_manager') redirect('pm_dashboard.php');
-    if ($_SESSION['role'] === 'customer') redirect('customer_dashboard.php');
+    $currentRole = $_SESSION['role'] ?? '';
+
+    if ($currentRole === 'rider') {
+        if (!empty($_SESSION['must_change_password'])) {
+            redirect('change_password.php');
+        }
+        redirect('rider_dashboard.php');
+    }
+
+    // Non-rider session → force logout so they can only use the rider form.
+    // This prevents a customer/admin session from leaking in.
+    $_SESSION = [];
+    if (ini_get("session.use_cookies")) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000,
+            $params["path"], $params["domain"],
+            $params["secure"], $params["httponly"]
+        );
+    }
+    session_destroy();
+    session_start(); // fresh session
+    session_regenerate_id(true);
 }
 
 $error = '';
-$debugInfo = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
@@ -27,21 +42,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($username === '' || $password === '') {
         $error = 'Please fill in all fields.';
     } else {
-        // ── Look up by username only (then verify role + password in PHP) ──
+        // Look up by username only
         $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ? LIMIT 1");
         $stmt->execute([$username]);
         $user = $stmt->fetch();
 
-        if (!$user) {
-            $error = 'Invalid username or password.';
-        } elseif ($user['role'] !== 'rider') {
-            $error = 'This account is not a rider account. Please use the main login.';
-        } elseif ($user['status'] !== 'active') {
-            $error = 'Your rider account is inactive. Please contact the administrator.';
-        } elseif (!password_verify($password, $user['password'])) {
+        // STRICT rider-only checks
+        $isRiderAccount = $user && $user['role'] === 'rider';
+        $passwordOk     = $user && password_verify($password, $user['password']);
+        $isActive       = $user && $user['status'] === 'active';
+
+        if (!$isRiderAccount || !$passwordOk || !$isActive) {
+            // Same generic message for everyone:
+            // - customers
+            // - admins, PMs
+            // - riders with wrong password
+            // - inactive accounts
+            // - nonexistent users
             $error = 'Invalid username or password.';
         } else {
-            // ✅ Successful login
             session_regenerate_id(true);
             $_SESSION['user_id']   = (int)$user['id'];
             $_SESSION['username']  = $user['username'];
@@ -288,13 +307,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             text-align: center;
             line-height: 1.5;
         }
-
-        .debug-box {
-            background: #111827; color: #f87171;
-            padding: 12px 14px; border-radius: 8px;
-            font-family: monospace; font-size: 0.75rem;
-            margin-bottom: 20px; word-break: break-all;
-        }
     </style>
 </head>
 <body>
@@ -359,10 +371,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 Use the username and temporary password we sent to your email. You'll be asked to change your password on first login.
             </div>
 
-            <div class="rider-footer">
-                <p style="margin:0;">Not a rider?</p>
-                <a href="<?= baseUrl('login.php') ?>" style="display:inline-block;margin-top:6px;">← Customer / Staff Login</a>
-            </div>
+            
 
             <div class="security-note">
                 🔒 Rider accounts are provided by the store administrator.
