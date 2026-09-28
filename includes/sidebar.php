@@ -4,9 +4,9 @@ $initial = strtoupper(substr($_SESSION['full_name'] ?? $_SESSION['username'] ?? 
 ?>
 <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
-        <div class="sidebar-logo">E</div>
+        <div class="sidebar-logo">G</div>
         <div class="sidebar-brand-text">
-            <h1>E-Commerce Core</h1>
+            <h1>Greenika</h1>
             <p><?php
                 echo $role === 'admin' ? 'Admin Panel' : (
                     $role === 'product_manager' ? 'Product Manager' : (

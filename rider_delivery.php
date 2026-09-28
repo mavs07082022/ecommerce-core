@@ -3,7 +3,7 @@ require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/config/db.php';
 requireRider();
 
-$pageTitle = 'My Deliveries — E-Commerce Core';
+$pageTitle = 'My Deliveries — Greenika';
 $uid = $_SESSION['user_id'];
 
 $r = $pdo->prepare("SELECT * FROM riders WHERE user_id = ?");

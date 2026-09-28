@@ -1,5 +1,5 @@
 <?php
-if (!isset($pageTitle)) $pageTitle = 'E-Commerce Core';
+if (!isset($pageTitle)) $pageTitle = 'Greenika';
 ?>
 <!DOCTYPE html>
 <html lang="en">

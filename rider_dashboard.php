@@ -4,7 +4,7 @@ require_once __DIR__ . '/config/db.php';
 requireRider();
 requirePasswordChange();
 
-$pageTitle = 'Rider Dashboard — E-Commerce Core';
+$pageTitle = 'Rider Dashboard — Greenika';
 $uid = $_SESSION['user_id'];
 
 // Get rider record

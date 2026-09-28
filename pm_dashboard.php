@@ -6,7 +6,7 @@ requireProductManager();
 // If admin, redirect to admin dashboard
 if (isAdmin()) redirect('index.php');
 
-$pageTitle = 'Product Manager Dashboard — E-Commerce Core';
+$pageTitle = 'Product Manager Dashboard — Greenika';
 
 // Stats
 $totalProducts   = $pdo->query("SELECT COUNT(*) FROM products")->fetchColumn();

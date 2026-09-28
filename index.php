@@ -3,7 +3,7 @@ require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/config/db.php';
 requireAdmin();
 
-$pageTitle = 'Dashboard — E-Commerce Core';
+$pageTitle = 'Dashboard — Greenika';
 
 $totalUsers     = $pdo->query("SELECT COUNT(*) FROM users WHERE role='customer'")->fetchColumn();
 $totalProducts  = $pdo->query("SELECT COUNT(*) FROM products")->fetchColumn();
